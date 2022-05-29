@@ -1,16 +1,14 @@
 globals
 [
-  ;num-players
-  ;num-rounds
-  ;pie-size
-  ;initial-demand
-  ;initial-accept
+  current-round
+  filename
 ]
 
 turtles-own [
-  demand-rate ;; portion of the pie to demand
-  accept-rate ;; min. portion to accept an offer 
   is-proposer? ;; true if the player has the role of proposer
+  min-rejected ;; lowest demand that was rejected
+  max-accepted ;; highest demand that was accepted
+  seen-demands ;; list of demands seen in previous rounds
 ]
 
 links-own [
@@ -22,9 +20,13 @@ breed [players player]
 
 ;; Reset the simulation
 to setup
-  random-seed 117
   clear-all
   reset-ticks
+  random-seed 117
+
+  set current-round 1
+  file-open "log.txt"
+  file-print ""
   setup-agents
 end
 
@@ -43,8 +45,9 @@ to init-players
     set shape "person"
     set color grey
     set is-proposer? false
-    set demand-rate random-normal initial-demand 0.2
-    set accept-rate random-normal initial-accept 0.2
+    set min-rejected 0
+    set max-accepted 0
+    set seen-demands []
     setxy random-pxcor random-pycor
   ]
 end
@@ -66,7 +69,13 @@ to go
   match-players
   send-offer
   send-response
-  if ticks > num-rounds [stop]
+  update-norms
+  write-log
+  set current-round (current-round + 1)
+  if current-round > num-rounds [
+    file-close 
+    stop 
+  ]
   tick
 end
 
@@ -94,29 +103,49 @@ to match-players
   ]
 end
 
-;; Send an offer to another agent
+;; Send an offer to another agent according to the norm
+;; The norm is the average of the lowest demand that is rejected and the highest demand that is accepted
 to send-offer
   ask players with [is-proposer?]  [
-    set demand-rate random-normal initial-demand 0.2
-    let rate demand-rate
+    let demand 0
+
+    ifelse (min-rejected = 0) or (max-accepted = 0) [
+      set demand random-normal initial-demand-mean initial-demand-sd ;; draw from a random distribution
+    ][
+      let norm (min-rejected + max-accepted) / 2
+      set demand norm ;; propose according to the norm
+    ]
+
     ask my-out-links [
-      set prop-demand (pie-size * rate)
+      set prop-demand demand
     ]
  ]
 end
 
-;; Respond to another agent's offer
+;; Respond to another agent's offer according to the norm
+;; The norm is the average over all previously seen demands
 to send-response
   ask players with [not is-proposer? and (count link-neighbors with [is-proposer?] > 0)] [
-    set accept-rate random-normal initial-accept 0.2
-    let reward 0
-    let threshold (pie-size * accept-rate)
+    let demand 0
+    let accept false
 
     ask my-out-links [
-      set reward (pie-size - prop-demand)
+      set demand prop-demand ;; get amount demanded by the proposer
     ]
 
-    ifelse reward < threshold [   
+    ifelse length seen-demands > 0 [
+      let norm (mean seen-demands)
+      if demand <= norm [
+        set accept true ;; accept if demand is lower than the norm
+      ]
+    ][
+      let rate random-normal initial-accept-mean initial-accept-sd ;; draw from a random distribution
+      if (random-float 1 < rate) [
+        set accept true
+      ]
+    ]
+
+    ifelse not accept [   
       set label "no" ;; refuse the offer
     ][
       set label "yes" ;; accept the offer
@@ -132,5 +161,37 @@ to send-response
         set color green
       ]
   ]
+end
 
+to update-norms
+  ask players [
+    let demand 0
+    let accepted 0
+
+    ask my-out-links [
+      set demand prop-demand ;; amount demanded by the proposer
+      set accepted resp-accept ;; whether the offer was accepted or not
+    ]
+
+    set seen-demands lput demand seen-demands ;; update seen demands
+
+    ifelse accepted = 1 [
+      if demand > max-accepted [
+        set max-accepted demand ;; update highest accepted demand
+      ]
+    ][
+      if (demand < min-rejected) or (min-rejected = 0) [
+        set min-rejected demand ;; update lowest rejected demand
+      ]
+    ]
+  ]
+end
+
+to write-log
+  let demands [prop-demand] of links
+  let accepted [resp-accept] of links
+  file-type (word "Round: " current-round ", ")
+  file-type (word "Demand: " mean demands ", ")
+  file-type (word "Accept: " mean accepted)
+  file-print ""
 end

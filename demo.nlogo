@@ -1,16 +1,14 @@
 globals
 [
-  ;num-players
-  ;num-rounds
-  ;pie-size
-  ;initial-demand
-  ;initial-accept
+  current-round
+  filename
 ]
 
 turtles-own [
-  demand-rate ;; portion of the pie to demand
-  accept-rate ;; min. portion to accept an offer
   is-proposer? ;; true if the player has the role of proposer
+  min-rejected ;; lowest demand that was rejected
+  max-accepted ;; highest demand that was accepted
+  seen-demands ;; list of demands seen in previous rounds
 ]
 
 links-own [
@@ -22,9 +20,13 @@ breed [players player]
 
 ;; Reset the simulation
 to setup
-  random-seed 117
   clear-all
   reset-ticks
+  random-seed 117
+
+  set current-round 1
+  file-open "log.txt"
+  file-print ""
   setup-agents
 end
 
@@ -43,8 +45,9 @@ to init-players
     set shape "person"
     set color grey
     set is-proposer? false
-    set demand-rate random-normal initial-demand 0.2
-    set accept-rate random-normal initial-accept 0.2
+    set min-rejected 0
+    set max-accepted 0
+    set seen-demands []
     setxy random-pxcor random-pycor
   ]
 end
@@ -66,7 +69,13 @@ to go
   match-players
   send-offer
   send-response
-  if ticks > num-rounds [stop]
+  update-norms
+  write-log
+  set current-round (current-round + 1)
+  if current-round > num-rounds [
+    file-close
+    stop
+  ]
   tick
 end
 
@@ -94,29 +103,49 @@ to match-players
   ]
 end
 
-;; Send an offer to another agent
+;; Send an offer to another agent according to the norm
+;; The norm is the average of the lowest demand that is rejected and the highest demand that is accepted
 to send-offer
   ask players with [is-proposer?]  [
-    set demand-rate random-normal initial-demand 0.2
-    let rate demand-rate
+    let demand 0
+
+    ifelse (min-rejected = 0) or (max-accepted = 0) [
+      set demand random-normal initial-demand-mean initial-demand-sd ;; draw from a random distribution
+    ][
+      let norm (min-rejected + max-accepted) / 2
+      set demand norm ;; propose according to the norm
+    ]
+
     ask my-out-links [
-      set prop-demand (pie-size * rate)
+      set prop-demand demand
     ]
  ]
 end
 
-;; Respond to another agent's offer
+;; Respond to another agent's offer according to the norm
+;; The norm is the average over all previously seen demands
 to send-response
   ask players with [not is-proposer? and (count link-neighbors with [is-proposer?] > 0)] [
-    set accept-rate random-normal initial-accept 0.2
-    let reward 0
-    let threshold (pie-size * accept-rate)
+    let demand 0
+    let accept false
 
     ask my-out-links [
-      set reward (pie-size - prop-demand)
+      set demand prop-demand ;; get amount demanded by the proposer
     ]
 
-    ifelse reward < threshold [
+    ifelse length seen-demands > 0 [
+      let norm (mean seen-demands)
+      if demand <= norm [
+        set accept true ;; accept if demand is lower than the norm
+      ]
+    ][
+      let rate random-normal initial-accept-mean initial-accept-sd ;; draw from a random distribution
+      if (random-float 1 < rate) [
+        set accept true
+      ]
+    ]
+
+    ifelse not accept [
       set label "no" ;; refuse the offer
     ][
       set label "yes" ;; accept the offer
@@ -132,7 +161,39 @@ to send-response
         set color green
       ]
   ]
+end
 
+to update-norms
+  ask players [
+    let demand 0
+    let accepted 0
+
+    ask my-out-links [
+      set demand prop-demand ;; amount demanded by the proposer
+      set accepted resp-accept ;; whether the offer was accepted or not
+    ]
+
+    set seen-demands lput demand seen-demands ;; update seen demands
+
+    ifelse accepted = 1 [
+      if demand > max-accepted [
+        set max-accepted demand ;; update highest accepted demand
+      ]
+    ][
+      if (demand < min-rejected) or (min-rejected = 0) [
+        set min-rejected demand ;; update lowest rejected demand
+      ]
+    ]
+  ]
+end
+
+to write-log
+  let demands [prop-demand] of links
+  let accepted [resp-accept] of links
+  file-type (word "Round: " current-round ", ")
+  file-type (word "Demand: " mean demands ", ")
+  file-type (word "Accept: " mean accepted)
+  file-print ""
 end
 @#$#@#$#@
 GRAPHICS-WINDOW
@@ -216,20 +277,20 @@ PENS
 
 TEXTBOX
 8
-318
+320
 158
-336
-Responders
+338
+Responder settings
 14
 105.0
 1
 
 TEXTBOX
 8
-202
+189
 158
-220
-Proposers
+207
+Proposer settings
 14
 15.0
 1
@@ -307,106 +368,81 @@ false
 PENS
 "default" 1.0 0 -16777216 true "" "plot mean [resp-accept] of links"
 
-INPUTBOX
+SLIDER
 13
-231
-140
-291
-initial-demand
-0.5
+222
+185
+255
+initial-demand-mean
+initial-demand-mean
 1
-0
-Number
+1000
+562.0
+1
+1
+NIL
+HORIZONTAL
 
-INPUTBOX
+SLIDER
 13
-349
-133
-409
-initial-accept
-0.5
-1
+266
+185
+299
+initial-demand-sd
+initial-demand-sd
 0
-Number
+200
+129.0
+1
+1
+NIL
+HORIZONTAL
+
+SLIDER
+14
+354
+186
+387
+initial-accept-mean
+initial-accept-mean
+0
+1
+0.81
+0.01
+1
+NIL
+HORIZONTAL
+
+SLIDER
+14
+401
+186
+434
+initial-accept-sd
+initial-accept-sd
+0
+0.6
+0.4
+0.1
+1
+NIL
+HORIZONTAL
 
 @#$#@#$#@
-# WHAT IS IT?
+# SOAS Project - Cristian Camargo, Felix Schreyer
 
-This is a an excercise model that attempts to describe the emergence of cumulative wealth and the distribution of such wealth in an iterative ultimatum game, considering the prosocial emotion of "shame" and profit-maximing "greed",
-
-This  model is inspared by the work of Reuben et al in trying to understand the role of emotions after punishment (in particular shame/guilt) in the take rates of proposers:
-
-https://www.sciencedirect.com/science/article/abs/pii/S0167487010000887?via%3Dihub
+The goal of this model is to simulate the behavior of normative agents as they play the multi-round **Ultimatum Game** (UG), based on the proposed design by the paper *"The Value of Values and Norms in Social Simulation"* by Mercuur et al.
 
 
-## ULTIMATUM GAMES
+## GAME PREMISE
 
 One player, the proposer, is endowed with a sum of money. The proposer is tasked with splitting it with another player, the responder. Once the proposer communicates their decision, the responder may accept it or reject it. If the responder accepts, the money is split per the proposal; if the responder rejects, both players receive nothing
 
+In the UG, two players negotiate over a fixed amount of money ("the pie"). Player 1, the proposer, demands a portion of the pie, with the remainder offered to Player 2. Player 2, the responder, can choose to accept or reject this proposed split. If the responder chooses to **accept**, the proposed split is implemented. If the responder chooses to **reject**, both players get no money. 
 
-Ultimatum games: https://en.wikipedia.org/wiki/Ultimatum_game
+In the multi-round scenario, we test if the change in behaviour humans display over multiple rounds of UG-play can be reproduced by the different agent models.
 
 ## HOW IT WORKS
-60 players are created and endowed with an initial amount of money - 10 euros. This initial endowment can be taken from a distribution (exponential or normal) or be equal for all the participants. This is controlled by the **initial-endowment-distribution** selector.
-
-Players are also assigned with a take-rate in the case they are proposers (**prop-take-rate**) and one for when they take the roles of responders (**resp-take-rate**). The proposer take rate will determine the offer of the proposer while the responder take rate will determine the amount that the responder agrees to from the proposer to take.
-
-To cater for variabilities in fairness perceptions in the different players the take rates are taken from a normal distribution with mean **mean-take-rate** and **sd-take-rate** both for the responder and proposer rates.
-
-Each turn these players are randomly assigned to the role of responder (red) and proposer (blue) and responders and proposers are paired with each other, also randomly.
-
-If the responder has an endowment and the proposers endowment is more than the **cost-to-play** then a link is established between the two and a proposal is made by the proposer to take an amount of the endowment of the responder according to the **prop-take-rate** of the proposer. 
-
-If the proposed take rate is lower or equal to the what the responder considers fair (**resp-take-rate**) there is a "deal" and the proposed proportion of the responders endowment will pass to the proposer and be deducted from the responders.
-
-If the proposed take rate is larger than the one that the responder considers fair (**resp-take-rate**) there is no deal, and the proposer will set his/her endowment to 0 effectively destroying their wealth.
-
-Those proposers who got they proposal rejected will reduce the prop-take-rate by a percentage corresponding to the **prop-shame-weight** for next time.
-
-Those proposers who got they proposal accepted will increase the prop-take-rate by a percentage corresponding to the **prop-greed-weight** for next time.
-
-For the next turn every player's endowment will be increased by a fixed amount defined by the **turn-endowment** global variable simulating a wellfare endowment. 
-
-Additionally, the current endowment of the players (not considering the wellfare endowment) will be increased by 1+**interest-rate** each turn
-
-The game will end after 100 turns. If no proposals can be made (no proposers can afford the cost-to-play and/or responders have 0 endowment left) the game will end.
-
-## THINGS TO NOTICE
-
-- Which starting point of take rates (both responder and proposer) and combination of adjusting behavior (greed/shame) will be the best agent for a given agent to maximize long term profit.
-- Cummulative weatlh - what is the best settings and players strategy to reach the best cumulative wealth?
-- Wealth distribution - what is the best settings and players  strategy to achieve the fairest wealth distribution?
-- Players out of the game - the amount of players that can no longer play because they can't affor the cost-to-play.
-- How many turns does the game last?
-
-
-## THINGS TO TRY
-
-- Try cost to play = 0 (everyone can propose)
-- Explore the relationship between turn-endowment and cost-to-play
-- Comapre fixed endowment with interest rate on current endowment and how that affects the wealth distribution
-
-## EXTENDING THE MODEL
-
-- Compare this model with one where the players stick to they roles (once a proposer/responder always a proposer/responder)
-- Wellfare endowment could be a proportion of the amount taken from the responders in succesfull operations in each turn. This would simulate an authority redistributing wealth.
-- Eplore different distributions in the resp-take-rates and prop-take-rate
-- Include and adjusting behavior on the resp-take-rate for the responder after destroying the endowment.
-- This model only considers take-rates for the responder decison to wether destroy the endowment or not. It is clear that the abolute value of the take should also be considered.
-- Greed and shame weights are assumed to be equal for all participants. These could be drawn from a distribution to add some more randomness to the model.
-- This models response in binary terms (destroy all vs accept) . This model could be extended to consider partial endowment destroy.
-
-
-## RELATED MODELS
-
-Wealth distribution
-
-## CREDITS AND REFERENCES
-
-Author: Mariano Crimi
-
-https://www.sciencedirect.com/science/article/abs/pii/S0167487010000887?via%3Dihub
-https://www.nature.com/articles/s41598-017-05122-5
 @#$#@#$#@
 default
 true
