@@ -14,8 +14,8 @@ turtles-own [
 ]
 
 links-own [
-  offer-amount ;; amount for the transaction
-  accept-offer ;; 1 if the responder accepts the offer
+  prop-demand ;; amount demanded by the proposer
+  resp-accept ;; equals 1 if the responder accepts the offer
 ]
 
 breed [players player]
@@ -25,18 +25,19 @@ to setup
   random-seed 117
   clear-all
   reset-ticks
-  init-players
+  setup-agents
 end
 
-;; Initialize the player agents
-to init-players
+;; Create and setup the player agents
+to setup-agents
   create-players num-players
-  reset-players
+  init-players
   init-roles
+  match-players
 end
 
-;; Reset the agents' state
-to reset-players
+;; Initialize the agents' state
+to init-players
   ask players [
     set label ""
     set shape "person"
@@ -48,9 +49,20 @@ to reset-players
   ]
 end
 
+;; Agents are randomly marked as responders or proposers
+to init-roles
+  ask n-of (num-players / 2) players [
+    set is-proposer? true
+    set color red
+  ]
+  ask players with [not is-proposer?]  [
+    set color blue
+  ]
+end
+
 ;; Run the simulation
 to go
-  init-roles
+  reset-players
   match-players
   send-offer
   send-response
@@ -58,23 +70,24 @@ to go
   tick
 end
 
-;; Agents are randomly marked as responders or proposers and then paired with each other
-to init-roles
-  clear-links
-  reset-players
-  ask n-of (num-players / 2) players [
+to reset-players
+  ask players [
+    set label ""
+  ]
+  ask players with [is-proposer?]  [
     set color red
-    set is-proposer? true
   ]
   ask players with [not is-proposer?]  [
     set color blue
   ]
-  layout-circle players with [is-proposer?] (world-width / 2.3)
-  layout-circle players with [not is-proposer?] (world-width / 2.13)
 end
 
-;; Pair proposers with responders
+;; Proposer agents are paired with Responder agents
 to match-players
+  clear-links
+  layout-circle players with [is-proposer?] (world-width / 3.0)
+  layout-circle players with [not is-proposer?] (world-width / 2.7)
+
   ask players with [is-proposer?] [
     let partner turtles-on neighbors
     create-links-with partner
@@ -84,32 +97,36 @@ end
 ;; Send an offer to another agent
 to send-offer
   ask players with [is-proposer?]  [
+    set demand-rate random-normal initial-demand 0.2
     let rate demand-rate
-    ask my-out-links[
-      set offer-amount (pie-size * rate)
+    ask my-out-links [
+      set prop-demand (pie-size * rate)
     ]
  ]
 end
 
 ;; Respond to another agent's offer
 to send-response
-  ask players with [not is-proposer? and count link-neighbors with [is-proposer?] > 0] [
-    let amount 0
+  ask players with [not is-proposer? and (count link-neighbors with [is-proposer?] > 0)] [
+    set accept-rate random-normal initial-accept 0.2
+    let reward 0
+    let threshold (pie-size * accept-rate)
+
     ask my-out-links [
-      set amount (pie-size - offer-amount)
+      set reward (pie-size - prop-demand)
     ]
-    ifelse amount < (pie-size * accept-rate) [
+
+    ifelse reward < threshold [
       set label "no" ;; refuse the offer
-    ]
-    [
+    ][
       set label "yes" ;; accept the offer
       ask my-out-links [
-        set accept-offer 1
+        set resp-accept 1
       ]
     ]
   ]
 
-  ask players with [label = "yes" and not is-proposer?] [
+  ask players with [label = "yes"] [
       set color green
       ask link-neighbors [
         set color green
@@ -195,7 +212,7 @@ true
 false
 "" ""
 PENS
-"default" 1.0 0 -16777216 true "" "plot mean [offer-amount] of links"
+"default" 1.0 0 -16777216 true "" "plot mean [prop-demand] of links"
 
 TEXTBOX
 8
@@ -288,7 +305,7 @@ true
 false
 "" ""
 PENS
-"default" 1.0 0 -16777216 true "" "plot mean [accept-offer] of links"
+"default" 1.0 0 -16777216 true "" "plot mean [resp-accept] of links"
 
 INPUTBOX
 13
@@ -313,7 +330,7 @@ initial-accept
 Number
 
 @#$#@#$#@
-## WHAT IS IT?
+# WHAT IS IT?
 
 This is a an excercise model that attempts to describe the emergence of cumulative wealth and the distribution of such wealth in an iterative ultimatum game, considering the prosocial emotion of "shame" and profit-maximing "greed",
 
