@@ -1,183 +1,128 @@
 globals
 [
-  sum-wealth
+  ;num-players
+  ;num-rounds
+  ;pie-size
+  ;initial-demand
+  ;initial-accept
 ]
 
 turtles-own [
-  endowment ;;amount of money to play
-  proposer ;;boolean, 1 if the player aquired the role of proposer for the turn
-  responder ;;boolean, 1 if the player aquired the role of responder for the turn
-  prop-take-rate ;;the take-rate the the player will propose to the responder if it has the proposer role for the turn
-  resp-take-rate ;;tha tak-e rate that the player will accept from a proposer if it has the responder role for the turn
+  demand-rate ;; portion of the pie to demand
+  accept-rate ;; min. portion to accept an offer
+  is-proposer? ;; true if the player has the role of proposer
 ]
+
 links-own [
-  take-amount ;;amount fo the transaction
-  trn-prop-take-rate ;;proposed take of the transaction
+  offer-amount ;; amount for the transaction
+  accept-offer ;; 1 if the responder accepts the offer
 ]
 
 breed [players player]
 
-
-;;;
-;;; SETUP PROCEDURES
-;;;
-
+;; Reset the simulation
 to setup
+  random-seed 117
   clear-all
   reset-ticks
-  setup-players
+  init-players
 end
 
-;;Create players, set initial endowments and take rates
-to setup-players
-  create-players 32
-  ask players [
-    ;;setup initial endowment
-    (ifelse  initial-endowment-distribution = "Exp" [
-      set endowment random-exponential 10
-    ] initial-endowment-distribution = "Normal" [
-      set endowment random-normal 10 1
-    ] initial-endowment-distribution = "Equal" [
-      set endowment 10
-    ])
+;; Initialize the player agents
+to init-players
+  create-players num-players
+  reset-players
+  init-roles
+end
 
+;; Reset the agents' state
+to reset-players
+  ask players [
+    set label ""
     set shape "person"
     set color grey
+    set is-proposer? false
+    set demand-rate random-normal initial-demand 0.2
+    set accept-rate random-normal initial-accept 0.2
     setxy random-pxcor random-pycor
-    set prop-take-rate random-normal prop-mean-take-rate prop-sd-take-rate;; draw take rates when player is proposer from a normal distribution
-    set resp-take-rate random-normal resp-mean-take-rate resp-sd-take-rate;; draw take rates when player is responder from a normal distribution
   ]
 end
 
-
-;;;
-;;; GO PROCEDURES
-;;;
-
-
+;; Run the simulation
 to go
-  setup-turn
-  setup-proposals
-  prop-propose
-  resp-decide
-  ask players [set endowment endowment * (1 + interest-rate)] ;;earn interest
-  ask players [set endowment (endowment + turn-endowment)] ;;wellfare endowment
-  if count links < 1 [stop]
-  if ticks > 100 [stop]
+  init-roles
+  match-players
+  send-offer
+  send-response
+  if ticks > num-rounds [stop]
   tick
 end
 
-
-;;Each turn these players are randomly assigned to the role of responder (red) and proposer (blue)
-;;and responders and proposers are paired with each other in cricle, also randomly.
-to setup-turn
+;; Agents are randomly marked as responders or proposers and then paired with each other
+to init-roles
   clear-links
   reset-players
-  setup-responders
-  setup-proposers
-  layout-circle players with [responder = 1] (world-width / 2.13)
-  layout-circle players with [proposer = 1] (world-width / 2.3)
-  ask players with [endowment < cost-to-play] [ set color grey]
-end
-
-to reset-players
-  ask players [
-    setxy random-pxcor random-pycor
-    set proposer 0
-    set responder 0
-    set color grey
-    set label ""
-  ]
-
-end
-
-to setup-responders
-  ask n-of 30 players[
+  ask n-of (num-players / 2) players [
     set color red
-    set responder 1
-   ]
-end
-
-to setup-proposers
-  ask players with [responder != 1]  [
-    set proposer 1
+    set is-proposer? true
+  ]
+  ask players with [not is-proposer?]  [
     set color blue
   ]
+  layout-circle players with [is-proposer?] (world-width / 2.3)
+  layout-circle players with [not is-proposer?] (world-width / 2.13)
 end
 
-to setup-proposals
-  ask players with [responder = 1 and endowment > 0] [ ;;only link if you have money to play
-    let potential-partner turtles-on  neighbors
-    let actual-partner potential-partner with [ endowment >= cost-to-play] ;;only link if the proposer can afford the cost to play
-    create-links-with actual-partner
+;; Pair proposers with responders
+to match-players
+  ask players with [is-proposer?] [
+    let partner turtles-on neighbors
+    create-links-with partner
   ]
 end
 
-to prop-propose
- ask players with [proposer = 1]  [
-    let temp prop-take-rate
+;; Send an offer to another agent
+to send-offer
+  ask players with [is-proposer?]  [
+    let rate demand-rate
     ask my-out-links[
-      set trn-prop-take-rate temp
-    ]
- ]
- ask players with [responder = 1]  [
-    let temp2 endowment
-    ask my-out-links[
-      set take-amount (temp2 * trn-prop-take-rate)
+      set offer-amount (pie-size * rate)
     ]
  ]
 end
 
-to resp-decide
-ask players with [responder = 1 and count link-neighbors with [proposer = 1] > 0] [
-      let temp3 0
+;; Respond to another agent's offer
+to send-response
+  ask players with [not is-proposer? and count link-neighbors with [is-proposer?] > 0] [
+    let amount 0
+    ask my-out-links [
+      set amount (pie-size - offer-amount)
+    ]
+    ifelse amount < (pie-size * accept-rate) [
+      set label "no" ;; refuse the offer
+    ]
+    [
+      set label "yes" ;; accept the offer
       ask my-out-links [
-        set temp3 trn-prop-take-rate
+        set accept-offer 1
       ]
-      ifelse  temp3  > resp-take-rate [   ;;destroy the endowment
-        set endowment 0
-        set label "x"
-      ]
-      [
-        set label "deal!" ;;accept the take
-      ]
-]
+    ]
+  ]
 
-ask players with [label = "deal!" and responder = 1] [ ;; transactions for the agreed take
-    let temp4 0
-    set color green
-    ask my-out-links [ ;; retrieve the amout the take-amount of the transaction
-      set temp4 take-amount
-    ]
-      set endowment endowment - temp4 ;; deduce the take-amount from the responders endowment
-    ask link-neighbors [
-      set endowment endowment + temp4 ;; deposit the take-amount in the proposers endowment
-      ;; increase the proposers take rate for next time
-      ifelse (prop-take-rate * (1 + prop-greed-weight)) <= 1 [
-        set prop-take-rate (prop-take-rate * (1 + prop-greed-weight))
-      ][
-        set prop-take-rate 1
+  ask players with [label = "yes" and not is-proposer?] [
+      set color green
+      ask link-neighbors [
+        set color green
       ]
-       set color green
-    ]
-]
+  ]
 
-ask players with [label = "x" and responder = 1] [ ;; associated proposers take shame and reduce take-ratio
-    ask my-out-links [set color red]
-    ask link-neighbors [
-      set prop-take-rate (prop-take-rate * (1 - prop-shame-weight)) ;; reduce the proposers take rate for next time
-    ]
-]
 end
-
-
-;2020- Mariano Crimi
 @#$#@#$#@
 GRAPHICS-WINDOW
-211
-10
-644
-444
+230
+12
+663
+446
 -1
 -1
 12.9
@@ -202,9 +147,9 @@ turns
 
 BUTTON
 360
-454
+453
 424
-487
+486
 setup
 setup
 NIL
@@ -234,183 +179,42 @@ NIL
 NIL
 1
 
-SLIDER
-0
-419
-189
-452
-resp-mean-take-rate
-resp-mean-take-rate
-0
-1
-0.5
-0.01
-1
-NIL
-HORIZONTAL
-
-SLIDER
-1
-230
-185
-263
-prop-mean-take-rate
-prop-mean-take-rate
-0
-1
-0.8
-0.01
-1
-NIL
-HORIZONTAL
-
-SLIDER
-1
-269
-185
-302
-prop-sd-take-rate
-prop-sd-take-rate
-0
-0.1
-0.07
-0.01
-1
-NIL
-HORIZONTAL
-
-SLIDER
-1
-307
-185
-340
-prop-shame-weight
-prop-shame-weight
-0
-1
-0.6
-0.05
-1
-NIL
-HORIZONTAL
-
 PLOT
 664
 11
-1106
-175
-Total wealth
-NIL
+1061
+231
+Avg. demand
+Rounds
 NIL
 0.0
 10.0
 0.0
-10.0
+1.0
 true
 false
 "" ""
 PENS
-"default" 1.0 0 -16777216 true "" "plot sum [endowment] of turtles"
-
-PLOT
-663
-182
-1110
-302
-Wealth distribution
-$
-players
-0.0
-500.0
-0.0
-60.0
-false
-false
-"" ""
-PENS
-"pen-0" 10.0 1 -7500403 true "" "plot-pen-reset\nhistogram [endowment] of players"
-
-SLIDER
-0
-347
-186
-380
-prop-greed-weight
-prop-greed-weight
-0
-1
-0.05
-0.05
-1
-NIL
-HORIZONTAL
-
-SLIDER
-0
-456
-187
-489
-resp-sd-take-rate
-resp-sd-take-rate
-0
-0.1
-0.02
-0.01
-1
-NIL
-HORIZONTAL
-
-PLOT
-665
-310
-1110
-453
-# of players who can't play
-NIL
-NIL
-0.0
-10.0
-0.0
-10.0
-true
-false
-"" ""
-PENS
-"default" 1.0 0 -16777216 true "" "plot count turtles with [endowment < cost-to-play]"
-
-SLIDER
-0
-82
-187
-115
-interest-rate
-interest-rate
-0
-1
-0.05
-0.05
-1
-NIL
-HORIZONTAL
+"default" 1.0 0 -16777216 true "" "plot mean [offer-amount] of links"
 
 TEXTBOX
-4
-395
-154
-413
+8
+318
+158
+336
 Responders
 14
-14.0
+105.0
 1
 
 TEXTBOX
-4
-204
-154
-222
+8
+202
+158
+220
 Proposers
 14
-95.0
+15.0
 1
 
 TEXTBOX
@@ -418,50 +222,95 @@ TEXTBOX
 10
 157
 28
-World settings
+Game settings
 14
 0.0
 1
 
-CHOOSER
-0
-34
-187
-79
-initial-endowment-distribution
-initial-endowment-distribution
-"Exp" "Normal" "Equal"
+SLIDER
+14
+38
+186
+71
+num-players
+num-players
+2
+64
+32.0
+2
 1
+NIL
+HORIZONTAL
 
 SLIDER
-0
-158
-190
-191
-cost-to-play
-cost-to-play
-0
-100
-1.0
+14
+84
+186
+117
+num-rounds
+num-rounds
+1
+20
+10.0
 1
 1
 NIL
 HORIZONTAL
 
 SLIDER
-0
-119
-189
-152
-turn-endowment
-turn-endowment
-0
-100
+14
+132
+186
+165
+pie-size
+pie-size
+10
+2000
+1000.0
+10
+1
+NIL
+HORIZONTAL
+
+PLOT
+666
+238
+1061
+469
+Avg. acceptance
+Rounds
+NIL
 0.0
+10.0
+0.0
+1.0
+true
+false
+"" ""
+PENS
+"default" 1.0 0 -16777216 true "" "plot mean [accept-offer] of links"
+
+INPUTBOX
+13
+231
+140
+291
+initial-demand
+0.5
 1
+0
+Number
+
+INPUTBOX
+13
+349
+133
+409
+initial-accept
+0.5
 1
-NIL
-HORIZONTAL
+0
+Number
 
 @#$#@#$#@
 ## WHAT IS IT?
