@@ -77,12 +77,12 @@ to go
   send-response
   update-norms
   write-log
+  tick
   set current-round (current-round + 1)
   if current-round > num-rounds [
     file-close
     stop
   ]
-  tick
 end
 
 to reset-players
@@ -275,7 +275,7 @@ Avg. demand
 Rounds
 NIL
 0.0
-10.0
+9.0
 0.0
 1.0
 true
@@ -368,7 +368,7 @@ Avg. acceptance
 Rounds
 NIL
 0.0
-10.0
+9.0
 0.0
 1.0
 true

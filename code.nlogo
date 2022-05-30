@@ -77,12 +77,12 @@ to go
   send-response
   update-norms
   write-log
+  tick
   set current-round (current-round + 1)
   if current-round > num-rounds [
     file-close 
     stop 
   ]
-  tick
 end
 
 to reset-players
