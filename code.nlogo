@@ -22,7 +22,7 @@ breed [players player]
 to setup
   clear-all
   reset-ticks
-  random-seed 117
+  ;random-seed 117
 
   set current-round 1
   file-open "log.txt"
