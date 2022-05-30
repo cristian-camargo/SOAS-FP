@@ -45,14 +45,3 @@ Proposers on the other hand will adjust their demands based on the average of tw
 After both players are done communicating their decisions, the mean values for the demand/acceptance rate for that round will be displayed across the two accompanying graphs. The results will also be output to a local text file "log.txt" that can be found in the same folder as the model file.
 
 Finally, the players will be randomly paired once again (without switching roles) and the game will start anew, up until the maximum number of rounds.
-
-
-
-
-
-
-
-
-
-
-

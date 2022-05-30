@@ -1,5 +1,6 @@
 globals
 [
+  current-sim
   current-round
   filename
 ]
@@ -20,14 +21,19 @@ breed [players player]
 
 ;; Reset the simulation
 to setup
+  let sim current-sim
   clear-all
   reset-ticks
+  setup-agents
   ;random-seed 117
 
+  set current-sim (sim + 1)
   set current-round 1
-  file-open "log.txt"
-  file-print ""
-  setup-agents
+  file-open "log.csv"
+  if (current-sim = 1) [
+      file-type "Test,Round,Demand,Accept"
+      file-print ""
+  ]
 end
 
 ;; Create and setup the player agents
@@ -163,6 +169,7 @@ to send-response
   ]
 end
 
+;; Update norm values for the player agents
 to update-norms
   ask players [
     let demand 0
@@ -187,11 +194,13 @@ to update-norms
   ]
 end
 
+;; Write results to the log file
 to write-log
   let demands [prop-demand] of links
   let accepted [resp-accept] of links
-  file-type (word "Round: " current-round ", ")
-  file-type (word "Demand: " mean demands ", ")
-  file-type (word "Accept: " mean accepted)
+  file-type (word current-sim ",")
+  file-type (word current-round ",")
+  file-type (word mean demands ",")
+  file-type (word mean accepted)
   file-print ""
 end
