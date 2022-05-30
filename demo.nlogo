@@ -431,7 +431,7 @@ HORIZONTAL
 @#$#@#$#@
 # SOAS Project - Cristian Camargo, Felix Schreyer
 
-The goal of this model is to simulate the behavior of normative agents as they play the multi-round **Ultimatum Game** (UG), based on the proposed design by the paper *"The Value of Values and Norms in Social Simulation"* by Mercuur et al.
+The goal of this project is to implement a netlogo model able to simulate the behavior of normative agents as they play the multi-round **Ultimatum Game** (UG), based on the proposed design by the paper *"The Value of Values and Norms in Social Simulation"* by Mercuur et al.
 
 
 ## THE SCENARIO
@@ -467,16 +467,15 @@ On the other hand, the rest of the settings control the starting behavior of the
 Initially, players are split into two groups: proposers (red) and responders (blue). They are then arranged in a circle formation so that each proposer is paired with a responder. Once the game starts, the proposer states his demand to their paired responder (via a link) and the responder then chooses his answer for the proposal. 
 If the responder accepts, he will show a message saying "yes" and both parties will be colored green to indicate that the deal went through. If he disagrees however, a message of "no" will be shown instead and their interaction will end here.
 
-During the first round, since no norms have been established for both the proposers and responders, they will decide their actions based on a normal distribution using the provided parameters from the model's configuration. This is meant to simulate that the agents are assumed to initially display human behavior, and study where they go from there.
+During the first round, since no norms have been established for both the proposers and responders, they will decide their actions based on a normal distribution using the provided parameters from the model's configuration. This is meant to simulate that the agents will initially display human behavior, an important assumption made by the authors of the paper, and then study where they go from there.
 
-Once the first round is done, responders will start basing their decision on the sim
+In each subsequent round, responders will start to base their decision threshold on the average value of the demands they've seen thus far. As such, if the value of the next demand is higher than the average of previous demands, they will reject the offer and cancel the deal.
 
+Proposers on the other hand will adjust their demands based on the average of two indicators: the lowest demand that has been rejected and the highest demand that has been accepted. If one of the indicators is missing (e.g. no demands have been accepted yet) then the agent will continue to draw a value from a normal distribution just like in the first round.
 
+After both players are done communicating their decisions, the mean values for the demand/acceptance rate for that round will be displayed across the two accompanying graphs. The results will also be output to a local text file "log.txt" that can be found in the same folder as the model file.
 
-
-
-
-
+Finally, the players will be randomly paired once again (without switching roles) and the game will start anew, up until the maximum number of rounds.
 @#$#@#$#@
 default
 true
